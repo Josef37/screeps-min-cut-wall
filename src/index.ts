@@ -11,7 +11,7 @@ const TARGET = "target";
 /**
  * Finds minimal wall placement to separate the center region from all exits.
  *
- * Walls are never built in the center or on exits.\
+ * Walls are never built in the center or near exits.\
  * Make sure the center can be separated from the exists. Or you'll get stupid results!
  */
 export const minCutWalls = ({
@@ -43,46 +43,50 @@ const createInitialGraph = ({
 
   const roomRegion = { left: 0, top: 0, right: roomSize - 1, bottom: roomSize - 1 };
   const isOnEdge = isNearRegion(expandRegionBy(-1)(roomRegion));
+  const isExit = (position: Position) => isOnEdge(position) && !isWall(position);
+  const isNearEdge = isNearRegion(expandRegionBy(-2)(roomRegion));
+  const isNearExit = (position: Position) => isNearEdge(position) && [...allNeighborsOf(position)].some(isExit);
+  const cannotBuildOn = (position: Position) => isExit(position) || isNearExit(position);
   const isOutOfBounds = not(isInRegion(roomRegion));
 
-  const forAllPositions = (callback: (position: Position) => void) => {
+  function* allPositions() {
     for (const x of range(roomSize)) {
       for (const y of range(roomSize)) {
-        callback({ x, y });
+        yield { x, y };
       }
     }
-  };
-  const forAllNeighborsOf = ({ x, y }: Position, callback: (neighbor: Position) => void) => {
+  }
+  function* allNeighborsOf({ x, y }: Position) {
     for (const dx of [-1, 0, 1]) {
       for (const dy of [-1, 0, 1]) {
         if (dx === 0 && dy === 0) continue;
         const neighbor = { x: x + dx, y: y + dy };
         if (isOutOfBounds(neighbor)) continue;
-        callback(neighbor);
+        yield neighbor;
       }
     }
-  };
+  }
   const connectNeighbors = (current: Position) => {
-    forAllNeighborsOf(current, neighbor => {
+    for (const neighbor of allNeighborsOf(current)) {
       if (isWall(neighbor)) {
-        return;
+        continue;
       }
       if (isCenter(neighbor)) {
         graph[SOURCE][key(current)] = Infinity;
-      } else if (isOnEdge(neighbor)) {
+      } else if (cannotBuildOn(neighbor)) {
         graph[key(current)][TARGET] = Infinity;
       } else {
         graph[key(current)][key(neighbor)] = Infinity;
       }
-    });
+    }
   };
 
-  forAllPositions(position => {
-    if (isWall(position) || isCenter(position) || isOnEdge(position)) return;
+  for (const position of allPositions()) {
+    if (isWall(position) || isCenter(position) || cannotBuildOn(position)) continue;
 
     graph[key(position)] = {};
     connectNeighbors(position);
-  });
+  }
 
   return graph;
 };

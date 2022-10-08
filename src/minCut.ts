@@ -1,4 +1,5 @@
 import { cloneDeep } from "lodash-es";
+import { breadthFirstSearch, getAllEdges } from "./graph";
 import { Edge, Graph } from "./types";
 
 /**
@@ -31,14 +32,14 @@ export const minCut = ({ graph, source, target }: { graph: Graph; source: string
   };
 
   while (true) {
-    const { visited, parent } = traverseGraph({ graph, source });
+    const { visited, parent } = breadthFirstSearch({ graph, sources: [source] });
     if (!visited[target]) break;
 
     const capacity = getPathFlowCapacity(parent);
     sendPathFlow(parent, capacity);
   }
 
-  const { visited } = traverseGraph({ graph, source });
+  const { visited } = breadthFirstSearch({ graph, sources: [source] });
 
   return getAllEdges(graph).filter(([from, to]) => {
     const isInMaxFlow = graph[from][to] === 0 && originalGraph[from][to] > 0;
@@ -46,39 +47,3 @@ export const minCut = ({ graph, source, target }: { graph: Graph; source: string
     return isInMaxFlow && verticesDisconnected;
   });
 };
-
-/**
- * Implements breadth-first-search (BFS).
- */
-const traverseGraph = ({ graph, source }: { graph: Graph; source: string }) => {
-  const parent: Record<string, string> = {};
-  const visited: Record<string, boolean> = {};
-
-  const queue = [source];
-  visited[source] = true;
-
-  while (queue.length > 0) {
-    const current = queue.shift()!;
-
-    for (const neighbor in graph[current]) {
-      const weight = graph[current][neighbor];
-      if (!visited[neighbor] && weight > 0) {
-        queue.push(neighbor);
-        visited[neighbor] = true;
-        parent[neighbor] = current;
-      }
-    }
-  }
-
-  return { visited, parent };
-};
-
-function* iterateEdges(graph: Graph) {
-  for (const from in graph) {
-    const list = graph[from];
-    for (const to in list) {
-      yield [from, to] as Edge;
-    }
-  }
-}
-const getAllEdges = (graph: Graph) => [...iterateEdges(graph)];

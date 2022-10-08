@@ -32,9 +32,9 @@ See [Edmonds–Karp algorithm](https://en.wikipedia.org/wiki/Edmonds%E2%80%93Kar
 We create a weighted directed graph where the vertices represent walkable positions. Edges connect neighboring vertices (by walking).\
 Additionally we create a source node for the center and a target node for all exits.
 
-- Connect all walkable positions - which are not in the center - to each other.
+- Connect all buildable positions (not wall, center or near exit) to each other.
 - Connect the source node to all positions next to the center.
-- Connect all positions next to an exit to the target node.
+- Collect all positions that are next to an exit. Connect their neighbors to the target.
 
 ### Step 2 - `transformGraph`
 
