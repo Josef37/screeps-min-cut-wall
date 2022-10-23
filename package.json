@@ -1,0 +1,23 @@
+{
+  "name": "screeps-min-cut-wall",
+  "version": "1.0.0",
+  "description": "Minimize the amount of walls necessary by graph theory!",
+  "main": "src/index.ts",
+  "scripts": {
+    "build": "tsc"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Josef37/screeps-min-cut-wall.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "Unlicense",
+  "bugs": {
+    "url": "https://github.com/Josef37/screeps-min-cut-wall/issues"
+  },
+  "homepage": "https://github.com/Josef37/screeps-min-cut-wall#readme",
+  "devDependencies": {
+    "typescript": "^4.8.4"
+  }
+}
