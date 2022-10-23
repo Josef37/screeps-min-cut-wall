@@ -1,7 +1,7 @@
-import { testable, minCutWalls } from ".";
-import { isInRegion } from "./region";
-import { Edge, Position } from "./types";
-import { toIndex } from "./utils";
+import { testable, minCutWalls } from "../src";
+import { isInRegion } from "../src/region";
+import { Edge, Position } from "../src/types";
+import { toIndex } from "../src/utils";
 const {
   SOURCE,
   TARGET,

@@ -1,7 +1,7 @@
 import "jest-extended";
-import { Graph } from "./graph";
 
-import { minCut } from "./minCut";
+import { Graph } from "../src/graph";
+import { minCut } from "../src/minCut";
 
 describe("minCut", () => {
   it("works for a simple example", () => {
