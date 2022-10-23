@@ -1,7 +1,4 @@
-export interface Position {
-  x: number;
-  y: number;
-}
+export type Position = [number, number];
 
 export interface Region {
   left: number;
@@ -10,7 +7,11 @@ export interface Region {
   bottom: number;
 }
 
-export type Node = string;
-export type Edge = [Node, Node];
+export type Vertex = number;
+export type Edge = [Vertex, Vertex];
 export type Weight = number;
-export type Graph = Record<Node, Record<Node, Weight>>;
+// Outer array is indexed by "from" vertex
+// Inner array is just a list
+export type GraphData<EdgeData extends {}> = Array<
+  Array<{ vertex: Vertex } & EdgeData>
+>;

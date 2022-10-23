@@ -1,12 +1,21 @@
-import { fromPairs, mapKeys, range, toPairs } from "lodash-es";
-import { ROOM_SIZE } from "./constants";
 import { minCut } from "./minCut";
-import { expandRegionBy, isInRegion, isNearRegion } from "./region";
-import { Edge, Graph, Position } from "./types";
-import { not } from "./typescript";
+import { isInRegion, isNearRegion, expandRegionBy } from "./region";
+import { Position, Edge, Vertex } from "./types";
+import { Graph } from "./graph";
+import { fromIndex, toIndex } from "./utils";
 
-const SOURCE = "source";
-const TARGET = "target";
+const SOURCE: Vertex = 0;
+const TARGET: Vertex = 1;
+const outKeyDelta = 2;
+const getInKeyDelta = (roomSize: number) => outKeyDelta + roomSize ** 2;
+
+enum TileState {
+  WALL,
+  BUILDABLE,
+  CENTER,
+  NEAR_EXIT,
+  EXIT,
+}
 
 /**
  * Finds minimal wall placement to separate the center region from all exits.
@@ -15,7 +24,7 @@ const TARGET = "target";
  * Make sure the center can be separated from the exists. Or you'll get stupid results!
  */
 export const minCutWalls = ({
-  roomSize = ROOM_SIZE,
+  roomSize = 50,
   isWall,
   isCenter,
 }: {
@@ -23,13 +32,12 @@ export const minCutWalls = ({
   isWall: (pos: Position) => boolean;
   isCenter: (pos: Position) => boolean;
 }) => {
-  const initialGraph = createInitialGraph({ roomSize, isWall, isCenter });
-  const transformedGraph = transformGraph(initialGraph);
-  const cut = minCut({ graph: transformedGraph, source: SOURCE, target: TARGET });
-  return getPositionsFromCut(cut);
+  const graph = createGraph({ roomSize, isWall, isCenter });
+  const edges = minCut({ graph, source: SOURCE, target: TARGET });
+  return getPositionsFromCut(roomSize)(edges);
 };
 
-const createInitialGraph = ({
+const createGraph = ({
   roomSize,
   isWall,
   isCenter,
@@ -38,100 +46,97 @@ const createInitialGraph = ({
   isWall: (pos: Position) => boolean;
   isCenter: (pos: Position) => boolean;
 }): Graph => {
-  const graph: Graph = { [SOURCE]: {}, [TARGET]: {} };
-  const key = serializePosition;
+  const graph = new Graph(2 + 2 * roomSize ** 2);
+  const INFINITY = 4 * roomSize;
+  const inKeyDelta = getInKeyDelta(roomSize);
+  const getKey = toIndex(roomSize);
+  const roomRegion = {
+    left: 0,
+    top: 0,
+    right: roomSize - 1,
+    bottom: roomSize - 1,
+  };
 
-  const roomRegion = { left: 0, top: 0, right: roomSize - 1, bottom: roomSize - 1 };
-  const isOnEdge = isNearRegion(expandRegionBy(-1)(roomRegion));
-  const isExit = (position: Position) => isOnEdge(position) && !isWall(position);
-  const isNearEdge = isNearRegion(expandRegionBy(-2)(roomRegion));
-  const isNearExit = (position: Position) => isNearEdge(position) && [...allNeighborsOf(position)].some(isExit);
-  const cannotBuildOn = (position: Position) => isExit(position) || isNearExit(position);
-  const isOutOfBounds = not(isInRegion(roomRegion));
-
-  function* allPositions() {
-    for (const x of range(roomSize)) {
-      for (const y of range(roomSize)) {
-        yield { x, y };
+  function* allPositionsKeyed() {
+    for (let x = 0; x < roomSize; x++) {
+      for (let y = 0; y < roomSize; y++) {
+        const position: Position = [x, y];
+        const key = getKey(position);
+        yield { position, key };
       }
     }
   }
-  function* allNeighborsOf({ x, y }: Position) {
+  function* allNeighborsOf([x, y]: Position) {
     for (const dx of [-1, 0, 1]) {
       for (const dy of [-1, 0, 1]) {
         if (dx === 0 && dy === 0) continue;
-        const neighbor = { x: x + dx, y: y + dy };
+        const neighbor: Position = [x + dx, y + dy];
         if (isOutOfBounds(neighbor)) continue;
         yield neighbor;
       }
     }
   }
-  const connectNeighbors = (current: Position) => {
-    for (const neighbor of allNeighborsOf(current)) {
-      if (isWall(neighbor)) {
-        continue;
-      }
-      if (isCenter(neighbor)) {
-        graph[SOURCE][key(current)] = Infinity;
-      } else if (cannotBuildOn(neighbor)) {
-        graph[key(current)][TARGET] = Infinity;
+
+  const isOnEdge = isNearRegion(expandRegionBy(-1)(roomRegion));
+  const isNearEdge = isNearRegion(expandRegionBy(-2)(roomRegion));
+  const isExit = (position: Position) =>
+    isOnEdge(position) && !isWall(position);
+  const isNearExit = (position: Position) =>
+    isNearEdge(position) && [...allNeighborsOf(position)].some(isExit);
+  const isOutOfBounds = (position: Position) =>
+    !isInRegion(roomRegion)(position);
+
+  const tileStates = Array(roomSize ** 2).fill(TileState.BUILDABLE);
+  for (const { position, key } of allPositionsKeyed()) {
+    if (isWall(position)) tileStates[key] = TileState.WALL;
+    else if (isOnEdge(position)) tileStates[key] = TileState.EXIT;
+    else if (isNearExit(position)) tileStates[key] = TileState.NEAR_EXIT;
+    else if (isCenter(position)) tileStates[key] = TileState.CENTER;
+  }
+
+  const connectNeighbors = ({
+    position,
+    key,
+  }: {
+    position: Position;
+    key: number;
+  }) => {
+    for (const neighbor of allNeighborsOf(position)) {
+      const neighborKey = getKey(neighbor);
+      const state = tileStates[neighborKey];
+      if (state === TileState.WALL || state === TileState.EXIT) {
+        // don't connect
+      } else if (state === TileState.CENTER) {
+        graph.createEdgeUnique(SOURCE, key + inKeyDelta, INFINITY);
+      } else if (state === TileState.NEAR_EXIT) {
+        graph.createEdgeUnique(key + outKeyDelta, TARGET, INFINITY);
       } else {
-        graph[key(current)][key(neighbor)] = Infinity;
+        graph.createEdge(key + outKeyDelta, neighborKey + inKeyDelta, INFINITY);
       }
     }
   };
 
-  for (const position of allPositions()) {
-    if (isWall(position) || isCenter(position) || cannotBuildOn(position)) continue;
+  for (const { position, key } of allPositionsKeyed()) {
+    if (tileStates[key] !== TileState.BUILDABLE) continue;
 
-    graph[key(position)] = {};
-    connectNeighbors(position);
+    connectNeighbors({ position, key });
+    graph.createEdge(key + inKeyDelta, key + outKeyDelta, 1);
   }
 
   return graph;
 };
 
-/**
- * Takes all non-terminal vertices `v` and split them into `v_in` and `v_out` connected with edge `(v_in, v_out)`.
- */
-const transformGraph = (initialGraph: Graph): Graph => {
-  const addSuffixOut = addSuffix("out");
-  const addSuffixIn = addSuffix("in");
-  const newEdgeWeight = 1;
-
-  const normalKeys = Object.keys(initialGraph).filter(key => !isTerminal(key));
-  const newListPairs = normalKeys.map(key => [
-    addSuffixIn(key), //
-    { [addSuffixOut(key)]: newEdgeWeight },
-  ]);
-  const transformedListPairs = toPairs(initialGraph).map(([key, list]) => {
-    const newKey = addSuffixOut(key);
-    const newList = mapKeys(list, (weight, listKey) => addSuffixIn(listKey!));
-    return [newKey, newList];
-  });
-  return fromPairs([...transformedListPairs, ...newListPairs]);
+const getPositionsFromCut = (roomSize: number) => {
+  const fromKey = fromIndex(roomSize);
+  return (edges: Edge[]) =>
+    edges.map(([inKey, outKey]) => fromKey(outKey - outKeyDelta));
 };
-
-/**
- * Expects all edges in cut to be "vertex edges", i.e. `["5|2_in", "5|2_out"]`.
- */
-const getPositionsFromCut = (edges: Edge[]): Position[] => edges.map(([from, to]) => deserializePosition(from));
-
-const serializePosition = ({ x, y }: Position) => `${x}|${y}`;
-/**
- * Expects keys to be two integers separated by one character.\
- * Examples: `12|3`, `5|22_in`, `52t12whatever`
- */
-const deserializePosition = (key: string): Position => {
-  const result = key.match(/(?<x>\d+).(?<y>\d+)/);
-  if (result === null) throw new Error(`Failed to deserialize ${key}`);
-  return { x: Number(result.groups?.x), y: Number(result.groups?.y) };
-};
-const isTerminal = (key: string) => [SOURCE, TARGET].includes(key);
-const addSuffix = (suffix: string) => (key: string) => isTerminal(key) ? key : `${key}_${suffix}`;
 
 export const testable = {
-  createInitialGraph,
-  transformGraph,
+  SOURCE,
+  TARGET,
+  outKeyDelta,
+  getInKeyDelta,
+  createGraph,
   getPositionsFromCut,
 };

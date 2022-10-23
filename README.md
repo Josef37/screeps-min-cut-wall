@@ -14,7 +14,7 @@ The function `minCutWall` takes the two arguments:
 - `isWall: ({x,y}) => boolean`: Treat these as not walkable.
 - `isCenter: ({x,y}) => boolean`: Don't put walls here. Center positions don't have to be connected.
 
-It returns a list of position which minimizes the amount of walls you have to place to separate the center (defined by `isCenter`) from the exits.
+It returns a list of positions which minimizes the amount of walls you have to place to separate the center (defined by `isCenter`) from the exits.
 
 Have a look at the tests to get a feel for the returned values.
 
@@ -25,27 +25,27 @@ Walls are usually defined by `isWall = ({ x, y }) => terrain.get(x, y) === TERRA
 ## Explanation
 
 The main idea is to find a minimum cut in the flow network from center to exit.\
-See [Edmonds–Karp algorithm](https://en.wikipedia.org/wiki/Edmonds%E2%80%93Karp_algorithm) and [Max-flow min-cut theorem](https://en.wikipedia.org/wiki/Max-flow_min-cut_theorem).
+See [Dinic's algorithm](https://en.wikipedia.org/wiki/Dinic%27s_algorithm) and [Max-flow min-cut theorem](https://en.wikipedia.org/wiki/Max-flow_min-cut_theorem).
 
-### Step 1 - `createInitialGraph`
+### Step 1 - `createGraph`
 
-We create a weighted directed graph where the vertices represent walkable positions. Edges connect neighboring vertices (by walking).\
+We create a weighted directed graph where each walkable position is represented by a vertex.\
+Edges connect neighboring vertices (neighboring in the sense of walking).\
 Additionally we create a source node for the center and a target node for all exits.
 
-- Connect all buildable positions (not wall, center or near exit) to each other.
-- Connect the source node to all positions next to the center.
-- Collect all positions that are next to an exit. Connect their neighbors to the target.
+We want to partition the edges of the graph by removing as little vertices as possible.\
+Since minimum cut algorithms only work for partitioning the vertices, we have to represent the room in a slightly different way:
 
-### Step 2 - `transformGraph`
+Build the graph such that each position becomes two vertices - connected by a single edge. All incoming edges are connected to one vertex and all outgoing edges to the other vertex.\
+The path `s -> u -> v -> t` in the "room world" will become `s -> u_in -> u_out -> v_in -> v_out -> t` in the "graph world".
 
-We try to find a minimum cut through vertices (i.e. room positions), but the algorithm only works for edges...
+Since we only want to cut these specially created "node-edges", we assign them a capacity/weight of `1`. All other edges have a capacity/weight of `Infinity`.
 
-Therefore we transform the graph such that each node becomes two - connected by a single edge.\
-`s -> u -> v -> w -> t` will become `s -> u_in -> u_out -> v_in -> v_out -> w_in -> w_out -> t`.
+### Step 2 - `minCut`
 
-Since we only want to cut these newly created "node-edges", we assign them a weight of `1`. All other edges have a weight of `Infinity`.
+Execute a maximum flow algorithm on the graph.
 
-### Step 3 - `minCut`
+The residual graph of that flow (meaning all capacity the graph has left after subtracting the flow) splits the vertices in at least two partitions.\
+A minimum cut can be constructed by those edges from the initial graph which connect the source partition with another partition and which got drained in the residual graph (meaning they got fully used by the maximum flow).
 
-Execute the actual min-cut algorithm on the transformed graph.\
 The resulting edges in the minimum cut can be traced back to the positions in the room.

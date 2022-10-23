@@ -1,49 +1,62 @@
-import { cloneDeep } from "lodash-es";
-import { breadthFirstSearch, getAllEdges } from "./graph";
-import { Edge, Graph } from "./types";
+import { Graph } from "./graph";
+import { Edge, Vertex } from "./types";
 
 /**
- * Implementation using Ford-Fulkerson
+ * Implementation using Dinic's algorithm
  *
  * It could break when some weights are `Infinity` because there could be a flow with infinite capacity resulting in `Infinity - Infinity === NaN`.
  * Better use a "large enough" value instead of `Infinity` - unless you know there won't be a flow with infinite capacity.
  */
-export const minCut = ({ graph, source, target }: { graph: Graph; source: string; target: string }): Edge[] => {
-  const originalGraph = cloneDeep(graph);
-
-  const getPathFlowCapacity = (parent: Record<string, string>) => {
-    let pathFlow = Infinity;
-    let vertex = target;
-    while (vertex !== source) {
-      pathFlow = Math.min(pathFlow, graph[parent[vertex]][vertex]);
-      vertex = parent[vertex];
-    }
-    return pathFlow;
+export const minCut = ({
+  graph,
+  source,
+  target,
+}: {
+  graph: Graph;
+  source: Vertex;
+  target: Vertex;
+}): Edge[] => {
+  const augment = ([from, to]: Edge, capacity: number) => {
+    graph.addWeight(from, to, -capacity);
+    graph.addWeight(to, from, capacity);
   };
 
-  const sendPathFlow = (parent: Record<string, string>, pathFlowCapacity: number) => {
-    let vertex = target;
-    while (vertex !== source) {
-      const [i, j] = [vertex, parent[vertex]];
-      graph[j][i] = (graph[j][i] ?? 0) - pathFlowCapacity;
-      graph[i][j] = (graph[i][j] ?? 0) + pathFlowCapacity;
-      vertex = parent[vertex];
-    }
+  const findFlowAndAugment = (levels: Record<Vertex, number>) => {
+    const findFlowRecursive = (
+      current: Vertex,
+      currentCapacity: number
+    ): number => {
+      if (current === target) return currentCapacity;
+
+      for (const { vertex: next, weight: capacity } of graph.iterateEdgesFrom(
+        current
+      )) {
+        const isInNextLevel = levels[current] + 1 === levels[next];
+        if (!isInNextLevel || capacity <= 0) continue;
+
+        const nextCapacity = Math.min(currentCapacity, capacity);
+        const flow = findFlowRecursive(next, nextCapacity);
+        if (flow > 0) {
+          augment([current, next], flow);
+          return flow;
+        }
+      }
+      // This is a dead end...
+      levels[current] = -1;
+      return 0;
+    };
+    return findFlowRecursive(source, Number.MAX_SAFE_INTEGER);
   };
 
   while (true) {
-    const { visited, parent } = breadthFirstSearch({ graph, sources: [source] });
-    if (!visited[target]) break;
+    const { levels, isConnected } = graph.breadthFirstSearch(source);
+    if (!isConnected(target)) break;
 
-    const capacity = getPathFlowCapacity(parent);
-    sendPathFlow(parent, capacity);
+    while (true) {
+      const flow = findFlowAndAugment(levels);
+      if (flow === 0) break;
+    }
   }
 
-  const { visited } = breadthFirstSearch({ graph, sources: [source] });
-
-  return getAllEdges(graph).filter(([from, to]) => {
-    const isInMaxFlow = graph[from][to] === 0 && originalGraph[from][to] > 0;
-    const verticesDisconnected = visited[from] && !visited[to];
-    return isInMaxFlow && verticesDisconnected;
-  });
+  return graph.getFilledEdgesOnEdge(source);
 };
